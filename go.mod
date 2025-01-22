@@ -17,6 +17,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/samber/lo v1.47.0 // indirect
+	github.com/sashabaranov/go-openai v1.36.1 // indirect
 	github.com/speculum-factorem/go-set v0.0.0-20250121132557-9c9f85da5578 // indirect
 	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
