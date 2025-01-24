@@ -14,7 +14,7 @@ type ArticlePostgresStorage struct {
 	db *sqlx.DB
 }
 
-func newArticleStorage(db *sqlx.DB) *ArticlePostgresStorage {
+func NewArticleStorage(db *sqlx.DB) *ArticlePostgresStorage {
 	return &ArticlePostgresStorage{db: db}
 }
 

@@ -3,24 +3,27 @@ package fetcher
 import (
 	"context"
 	"log"
-	"news-bot/internal/model"
-	"news-bot/internal/source"
 	"strings"
 	"sync"
 	"time"
 
-	// "github.com/speculum-factorem/go-set/set" //TODO: разобраться с пакетом
 	"news-bot/set"
+
+	"news-bot/internal/model"
+	src "news-bot/internal/source"
 )
 
+//go:generate moq --out=mocks/mock_article_storage.go --pkg=mocks . ArticleStorage
 type ArticleStorage interface {
 	Store(ctx context.Context, article model.Article) error
 }
 
-type SourceProvider interface {
+//go:generate moq --out=mocks/mock_sources_provider.go --pkg=mocks . SourcesProvider
+type SourcesProvider interface {
 	Sources(ctx context.Context) ([]model.Source, error)
 }
 
+//go:generate moq --out=mocks/mock_source.go --pkg=mocks . Source
 type Source interface {
 	ID() int64
 	Name() string
@@ -28,21 +31,22 @@ type Source interface {
 }
 
 type Fetcher struct {
-	arcticles      ArticleStorage
-	sources        SourceProvider
+	articles ArticleStorage
+	sources  SourcesProvider
+
 	fetchInterval  time.Duration
 	filterKeywords []string
 }
 
 func New(
 	articleStorage ArticleStorage,
-	sourceProvider SourceProvider,
+	sourcesProvider SourcesProvider,
 	fetchInterval time.Duration,
 	filterKeywords []string,
 ) *Fetcher {
 	return &Fetcher{
-		arcticles:      articleStorage,
-		sources:        sourceProvider,
+		articles:       articleStorage,
+		sources:        sourcesProvider,
 		fetchInterval:  fetchInterval,
 		filterKeywords: filterKeywords,
 	}
@@ -76,28 +80,23 @@ func (f *Fetcher) Fetch(ctx context.Context) error {
 
 	var wg sync.WaitGroup
 
-	for _, src := range sources {
+	for _, source := range sources {
 		wg.Add(1)
-
-		RSSSource := source.NewRSSSourceFromModel(src)
 
 		go func(source Source) {
 			defer wg.Done()
 
 			items, err := source.Fetch(ctx)
-
 			if err != nil {
-				log.Printf("[ERROR] Fetching items from source %s: %v", source.Name(), err) //вывод
+				log.Printf("[ERROR] failed to fetch items from source %q: %v", source.Name(), err)
 				return
 			}
 
 			if err := f.processItems(ctx, source, items); err != nil {
-				log.Printf("[ERROR] Processing items from source %s: %v", source.Name(), err)
+				log.Printf("[ERROR] failed to process items from source %q: %v", source.Name(), err)
 				return
 			}
-
-		}(RSSSource)
-
+		}(src.NewRSSSourceFromModel(source))
 	}
 
 	wg.Wait()
@@ -110,10 +109,11 @@ func (f *Fetcher) processItems(ctx context.Context, source Source, items []model
 		item.Date = item.Date.UTC()
 
 		if f.itemShouldBeSkipped(item) {
+			log.Printf("[INFO] item %q (%s) from source %q should be skipped", item.Title, item.Link, source.Name())
 			continue
 		}
 
-		if err := f.arcticles.Store(ctx, model.Article{
+		if err := f.articles.Store(ctx, model.Article{
 			SourceID:    source.ID(),
 			Title:       item.Title,
 			Link:        item.Link,
@@ -123,6 +123,7 @@ func (f *Fetcher) processItems(ctx context.Context, source Source, items []model
 			return err
 		}
 	}
+
 	return nil
 }
 

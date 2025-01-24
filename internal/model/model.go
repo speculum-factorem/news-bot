@@ -1,6 +1,8 @@
 package model
 
-import "time"
+import (
+	"time"
+)
 
 type Item struct {
 	Title      string
@@ -15,7 +17,9 @@ type Source struct {
 	ID        int64
 	Name      string
 	FeedURL   string
+	Priority  int
 	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type Article struct {

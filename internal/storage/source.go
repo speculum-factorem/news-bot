@@ -2,15 +2,20 @@ package storage
 
 import (
 	"context"
-	"news-bot/internal/model"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/samber/lo"
+
+	"news-bot/internal/model"
 )
 
 type SourcePostgresStorage struct {
 	db *sqlx.DB
+}
+
+func NewSourceStorage(db *sqlx.DB) *SourcePostgresStorage {
+	return &SourcePostgresStorage{db: db}
 }
 
 func (s *SourcePostgresStorage) Sources(ctx context.Context) ([]model.Source, error) {
@@ -18,11 +23,9 @@ func (s *SourcePostgresStorage) Sources(ctx context.Context) ([]model.Source, er
 	if err != nil {
 		return nil, err
 	}
-
 	defer conn.Close()
 
 	var sources []dbSource
-
 	if err := conn.SelectContext(ctx, &sources, `SELECT * FROM sources`); err != nil {
 		return nil, err
 	}
@@ -35,12 +38,10 @@ func (s *SourcePostgresStorage) SourceByID(ctx context.Context, id int64) (*mode
 	if err != nil {
 		return nil, err
 	}
-
 	defer conn.Close()
 
 	var source dbSource
-
-	if err := conn.GetContext(ctx, &source, `SELECT * FROM sources WHERE id=$1`, id); err != nil {
+	if err := conn.GetContext(ctx, &source, `SELECT * FROM sources WHERE id = $1`, id); err != nil {
 		return nil, err
 	}
 
@@ -58,10 +59,9 @@ func (s *SourcePostgresStorage) Add(ctx context.Context, source model.Source) (i
 
 	row := conn.QueryRowxContext(
 		ctx,
-		`INSERT INTO sources (name, feed_url, created_at) VALUES ($1, $2, $3) RETURNING ID`,
-		source.Name,
-		source.FeedURL,
-		source.CreatedAt,
+		`INSERT INTO sources (name, feed_url, priority)
+					VALUES ($1, $2, $3) RETURNING id;`,
+		source.Name, source.FeedURL, source.Priority,
 	)
 
 	if err := row.Err(); err != nil {
@@ -75,6 +75,18 @@ func (s *SourcePostgresStorage) Add(ctx context.Context, source model.Source) (i
 	return id, nil
 }
 
+func (s *SourcePostgresStorage) SetPriority(ctx context.Context, id int64, priority int) error {
+	conn, err := s.db.Connx(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.ExecContext(ctx, `UPDATE sources SET priority = $1 WHERE id = $2`, priority, id)
+
+	return err
+}
+
 func (s *SourcePostgresStorage) Delete(ctx context.Context, id int64) error {
 	conn, err := s.db.Connx(ctx)
 	if err != nil {
@@ -82,17 +94,18 @@ func (s *SourcePostgresStorage) Delete(ctx context.Context, id int64) error {
 	}
 	defer conn.Close()
 
-	if _, err := conn.ExecContext(ctx, `DELETE FROM sources WHERE id=$1`, id); err != nil {
+	if _, err := conn.ExecContext(ctx, `DELETE FROM sources WHERE id = $1`, id); err != nil {
 		return err
 	}
 
 	return nil
-
 }
 
 type dbSource struct {
 	ID        int64     `db:"id"`
 	Name      string    `db:"name"`
 	FeedURL   string    `db:"feed_url"`
+	Priority  int       `db:"priority"`
 	CreatedAt time.Time `db:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"`
 }
